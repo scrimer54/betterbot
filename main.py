@@ -1,5 +1,6 @@
 from collections import UserDict
 from datetime import date, timedelta
+import pickle
 import functools
 
 class Field:
@@ -62,29 +63,43 @@ class Record:
         return f"Contact name: {self.name.value}, phones: {phones_str}, birthday: {self.birthday}"
 
 class AddressBook(UserDict):
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+        self.load_from_file()
+
+    def load_from_file(self):
+        
+        try:
+            with open(self.file_path, 'rb') as file:
+                data = pickle.load(file)
+                self.data = data
+        except FileNotFoundError:
+            self.data = {}
+
+    def save_to_file(self):
+        with open(self.file_path, 'wb') as file:
+            pickle.dump(self.data, file)
+
     def add_record(self, record):
         self.data[record.name.value] = record
-
-    def find(self, name):
-        if name in self.data:
-            return self.data[name]
+        self.save_to_file()
 
     def delete(self, name):
-        if name in self.data:
-            del self.data[name]
+        del self.data[name]
+        self.save_to_file()
 
-    def __iter__(self):
-        return self.iterator()
-
-    def iterator(self, chunk_size=1):
-        records = list(self.data.values())
-        for i in range(0, len(records), chunk_size):
-            yield records[i:i + chunk_size]
-
-import functools
-
+    def search(self, query):
+        results = []
+        for record in self.data.values():
+            if query.lower() in record.name.value.lower():
+                results.append(record)
+            for phone in record.phones:
+                if query in phone.value:
+                    results.append(record)
+        return results
+    
 contacts = {}
-
 
 def input_error(func):
     @functools.wraps(func)
@@ -95,7 +110,6 @@ def input_error(func):
             return "Error: Invalid input. Try again."
 
     return wrapper
-
 
 def hello():
     return "How can I help you?"
@@ -131,6 +145,9 @@ def show_all_contacts():
     return result.strip()
 
 def main():
+    file_path = "address_book_data.pkl"
+    address_book = AddressBook(file_path)
+    
     print("Welcome to the helper bot!")
 
     while True:
@@ -145,17 +162,27 @@ def main():
             _, name, phone, *birthday = user_input.split(maxsplit=3)
             birthday = birthday[0] if birthday else None
             print(add_contact(name, phone, birthday))
+            address_book.add_record(contacts[name])
         elif user_input.startswith("change"):
             _, name, new_phone, *new_birthday = user_input.split(maxsplit=3)
             new_birthday = new_birthday[0] if new_birthday else None
             print(change_contact(name, new_phone, new_birthday))
+            address_book.save_to_file()
         elif user_input.startswith("phone"):
             _, name = user_input.split(maxsplit=1)
             print(phone_contact(name))
         elif user_input == "show all":
             print(show_all_contacts())
+        elif user_input.startswith("search"):
+            _, query = user_input.split(maxsplit=1)
+            results = address_book.search(query)
+            if results:
+                print("Search results:")
+                for result in results:
+                    print(result)
+            else:
+                print("No matching contacts found.")
         else:
             print("Unknown command. Try again.")
-
 if __name__ == "__main__":
     main()
